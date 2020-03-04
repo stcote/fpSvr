@@ -7,6 +7,8 @@
 
 const QString FP_PIPE_NAME = "FP_Pipe";
 
+const quint16 SCALE_PORT = 29456;
+
 const int NAME_MAX = 127;
 
 typedef struct
