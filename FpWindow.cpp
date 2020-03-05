@@ -10,8 +10,8 @@
 const QString FP_PIPE_NAME = "FP_Pipe";
 
 const quint16 SCALE_PORT = 29456;
-const QString SCALE_ADDR = "10.0.0.1";
-
+//const QString SCALE_ADDR = "10.0.0.1";
+const QString SCALE_ADDR = "127.0.0.1";
 
 const int NAME_MAX = 127;
 
@@ -338,12 +338,17 @@ void FpWindow::checkConnectionFailed()
     {
        // connection failed, try again
        tmOutCnt_++;
-       if ( tmOutCnt_ % 60 == 0 )
+       if ( tmOutCnt_ % 10 == 0 )
        {
           ui->textOut->append( "Unable to connect, retrying..." );
        }
 
        attemptingConnect_ = false;
+
+       //*** stop connect ***
+       scaleSock_->abort();
+
+       //*** try connect again ***
        attemptReconnect();
     }
 }
@@ -358,6 +363,8 @@ void FpWindow::checkConnectionFailed()
 void FpWindow::handleTcpConnected()
 {
     ui->textOut->append( "Connected..." );
+
+    ui->statusLbl->setText( "Connected" );
 
     isConnected_ = true;
     attemptingConnect_ = false;
@@ -376,6 +383,8 @@ void FpWindow::handleTcpConnected()
 void FpWindow::handleTcpDisconnected()
 {
     ui->textOut->append( "Server disconnected, reconnecting..." );
+
+    ui->statusLbl->setText( "Disconnected" );
 
     attemptingConnect_ = false;
     attemptReconnect();
@@ -399,7 +408,7 @@ void FpWindow::handleTcpError( QAbstractSocket::SocketError e )
 {
     if ( e != QAbstractSocket::ConnectionRefusedError )
     {
-        ui->textOut->append( "TCP Error!!!" );
+        ui->textOut->append( "TCP Error: " + scaleSock_->errorString() );
         qDebug() << "Error (" << e << "): " << scaleSock_->errorString();
     }
 }
