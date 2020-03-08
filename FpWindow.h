@@ -99,6 +99,8 @@ private:
 
     void setupNetworking();
 
+    void setupDatabase();
+
 
     Ui::FpWindow *ui;
 

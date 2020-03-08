@@ -37,3 +37,5 @@ debug/*
 deploy/*
 *.user
 ui*
+moc_*
+qrc_*

@@ -6,12 +6,19 @@
 #include <QDate>
 #include <QDebug>
 #include <QTimer>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlRecord>
+#include <QSqlQuery>
+
 
 const QString FP_PIPE_NAME = "FP_Pipe";
 
 const quint16 SCALE_PORT = 29456;
 //const QString SCALE_ADDR = "10.0.0.1";
 const QString SCALE_ADDR = "127.0.0.1";
+
+const QString DB_DSN_NAME = "FP_WEIGHTS";
 
 const int NAME_MAX = 127;
 
@@ -85,6 +92,9 @@ FpWindow::FpWindow(QWidget *parent) :
 
     //*** Title for the application window ***
     setWindowTitle( "Checkin Server" );
+
+    //*** setupDatabase ***
+    setupDatabase();
 
     //*** start trying to connect to scale server ***
     setupNetworking();
@@ -292,6 +302,29 @@ void FpWindow::setupNetworking()
 
     //*** start attempting to connect ***
     attemptReconnect();
+}
+
+
+//*****************************************************************************
+//*****************************************************************************
+/**
+ * @brief FpWindow::setupDatabase
+ */
+//*****************************************************************************
+void FpWindow::setupDatabase()
+{
+    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC3");
+    db.setDatabaseName( DB_DSN_NAME );
+
+    if(db.open())
+    {
+        qDebug() << "oK";
+        qDebug() << db.tables();
+    }
+    else
+      qDebug() << db.lastError().text();
+
+    db.close();
 }
 
 
