@@ -24,10 +24,12 @@ CONFIG += c++11
 
 SOURCES += \
         main.cpp \
-        FpWindow.cpp
+        FpWindow.cpp \
+    FPDB.cpp
 
 HEADERS += \
-        FpWindow.h
+        FpWindow.h \
+    FPDB.h
 
 FORMS += \
         FpWindow.ui
