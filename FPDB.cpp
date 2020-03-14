@@ -16,6 +16,7 @@ FPDB::FPDB( QString driver, QString dsn, QString label, bool isLocal, QObject *p
     driver_    = driver;
     dsn_       = dsn;
     isLocal_   = isLocal;
+    label_     = label;
     isReady_   = false;
     lastError_ = "No error";
     weightTbl_ = Q_NULLPTR;
@@ -24,6 +25,20 @@ FPDB::FPDB( QString driver, QString dsn, QString label, bool isLocal, QObject *p
 
     //*** setup access to the database ***
     setup();
+}
+
+
+//*****************************************************************************
+//*****************************************************************************
+/**
+ * @brief FPDB::FPDB
+ * @param parent
+ */
+//*****************************************************************************
+FPDB::~FPDB()
+{
+    if ( db_.isOpen() )
+        db_.close();
 }
 
 
@@ -73,17 +88,19 @@ void FPDB::setup()
     if ( isLocal_ )
     {
         //*** for local SQLITE database ***
-        insertStr = QString( "INSERT INTO %1 ( %2, %3, %4, %5 ) " )
+        insertStr = QString( "INSERT INTO %1 ( %2, %3, %4, %5, %6 ) " )
                 .arg(WeightTableName)
                 .arg(ID_Field)
                 .arg(Fam_ID_Field)
                 .arg(Weight_Field)
-                .arg(Date_Field);
-        insertStr += QString( "VALUES ( %1, %2, %3, %4 )" )
+                .arg(Date_Field)
+                .arg(Name_Field);
+        insertStr += QString( "VALUES ( %1, %2, %3, %4, %5 )" )
                 .arg(ID_Bind)
                 .arg(Fam_ID_Bind)
                 .arg(Weight_Bind)
-                .arg(Date_Bind);
+                .arg(Date_Bind)
+                .arg(Name_Bind);
     }
     else
     {
@@ -122,12 +139,13 @@ QString createStr;
     if ( !db_.isOpen() ) return false;
 
     //*** build string to create the weights table ***
-    createStr = QString( "create table %1 ( %2 integer primary key, %3 integer, %4 integer, %5 integer ) ")
+    createStr = QString( "create table %1 ( %2 integer primary key, %3 integer, %4 integer, %5 integer, %6 varchar(128) ) ")
                 .arg(WeightTableName)
                 .arg(ID_Field)
                 .arg(Fam_ID_Field)
                 .arg(Weight_Field)
-                .arg(Date_Field);
+                .arg(Date_Field)
+                .arg(Name_Field);
 
     //*** create table that holds weights ***
     if ( !query.exec( createStr ) )
@@ -146,11 +164,10 @@ QString createStr;
  * @brief FPDB::addRecord
  * @param id
  * @param weight
- * @param data
  * @return
  */
 //*****************************************************************************
-bool FPDB::addRecord( qint32 famId, float weight, qint64 date )
+bool FPDB::addRecord( qint32 famId, float weight )
 {
 bool rtn = true;
 
@@ -158,13 +175,45 @@ bool rtn = true;
     qint32 id = nextRecID_++;
 
     //*** bind values to query ***
-    insertQry_->bindValue( ID_Bind,    id );
-    insertQry_->bindValue( Fam_ID_Bind,  famId );
-    insertQry_->bindValue( Weight_Bind,  weight );
-    if ( isLocal_ )
+    insertQry_->bindValue( ID_Bind,     id );
+    insertQry_->bindValue( Fam_ID_Bind, famId );
+    insertQry_->bindValue( Weight_Bind, weight );
+
+    //*** execute the query ***
+    if ( !insertQry_->exec() )
     {
-        insertQry_->bindValue( Date_Bind, date );
+        lastError_ = insertQry_->lastError().text();
+        rtn = false;
     }
+
+    return rtn;
+}
+
+
+//*****************************************************************************
+//*****************************************************************************
+/**
+ * @brief FPDB::addRecord
+ * @param id
+ * @param weight
+ * @param date
+ * @param name
+ * @return
+ */
+//*****************************************************************************
+bool FPDB::addRecord( qint32 famId, float weight, qint64 date, QString name )
+{
+bool rtn = true;
+
+    //*** ID for this record ***
+    qint32 id = nextRecID_++;
+
+    //*** bind values to query ***
+    insertQry_->bindValue( ID_Bind,     id );
+    insertQry_->bindValue( Fam_ID_Bind, famId );
+    insertQry_->bindValue( Weight_Bind, weight );
+    insertQry_->bindValue( Date_Bind,   date );
+    insertQry_->bindValue( Name_Bind,   name );
 
     //*** execute the query ***
     if ( !insertQry_->exec() )
@@ -209,7 +258,7 @@ QString rtn;
             totalWeight += weightTbl_->record( row ).value( Weight_Idx ).toFloat();
         }
 
-        rtn.sprintf( "Count: %d   Weight %.1f lbs" );
+        rtn.sprintf( "Count: %d   Weight %.1f lbs", numEntries, totalWeight );
     }
     else
     {

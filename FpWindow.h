@@ -12,6 +12,39 @@ class FpWindow;
 
 class QLocalServer;
 class QTcpSocket;
+class FPDB;
+
+const int NAME_MAX = 127;
+
+typedef struct
+{
+    int key;
+    char name[NAME_MAX+1];
+    int  numItems;
+    qint64 day;
+} t_CheckIn;
+
+const int CHECKIN_SIZE = sizeof( t_CheckIn );
+
+
+typedef struct
+{
+    quint32 magic;
+    quint32 size;
+    quint32 type;
+    int     key;
+    float   weight;
+    qint64  day;
+} t_WeightReport;
+
+const int WEIGHT_SIZE = sizeof( t_WeightReport );
+
+const int MAGIC_VAL = 0x3e3e3e3e;
+
+const int WEIGHT_REPORT_SIZE = sizeof( t_WeightReport );
+const int WEIGHT_SIZE_FIELD = WEIGHT_REPORT_SIZE - ( 2 * sizeof(quint32) );
+const int WEIGHT_REPORT_TYPE = 0x0001;
+
 
 
 //*****************************************************************************
@@ -89,6 +122,8 @@ private slots:
     void handleTcpError( QAbstractSocket::SocketError e );
 
 
+    void handleDataIn();
+
 private:
 
     void createActions();
@@ -102,6 +137,7 @@ private:
     void setupDatabase();
 
 
+
     Ui::FpWindow *ui;
 
     //*** Windows 'Named Pipe' server ***
@@ -112,6 +148,7 @@ private:
 
     QHostAddress scaleAddr_;
     quint16      scalePort_;
+
     bool attemptingConnect_;   // True if we are attempting to connect, false if we are connected or disconnected
     bool isConnected_;         // True if we are connected to the TCP server
     int tmOutCnt_;
@@ -131,6 +168,10 @@ private:
     QIcon goodIcon_;
     QIcon badIcon_;
 
+    QHash<int,QString> keyToName_;
+
+    FPDB *fpDB_;
+    FPDB *localDB_;
 };
 
 #endif // FPWINDOW_H

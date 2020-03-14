@@ -1,5 +1,7 @@
 #include "FpWindow.h"
 #include "ui_FpWindow.h"
+#include "FPDB.h"
+
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QTcpSocket>
@@ -15,24 +17,17 @@
 const QString FP_PIPE_NAME = "FP_Pipe";
 
 const quint16 SCALE_PORT = 29456;
-const QString SCALE_ADDR = "10.0.1.1";
+//const QString SCALE_ADDR = "10.0.1.1";
 //const QString SCALE_ADDR = "127.0.0.1";
-
-const QString DB_DSN_NAME = "FP_WEIGHTS";
-
-const int NAME_MAX = 127;
-
-typedef struct
-{
-    int key;
-    char name[NAME_MAX+1];
-    int  numItems;
-    qint64 day;
-} t_CheckIn;
-
-const int CHECKIN_SIZE = sizeof( t_CheckIn );
+const QString SCALE_ADDR = "10.0.0.172";
 
 const int CONNECT_TIMEOUT_MS = 1000;
+
+const QString DB_DSN_NAME = "FP_WEIGHTS";
+const QString LOCAL_DB_PATH = "c:/fp/fp.db";
+
+const QString LOCAL_DB_LABEL = "LocalDB";
+const QString ACCESS_DB_LABEL = "AccessDB";
 
 //*****************************************************************************
 //*****************************************************************************
@@ -109,7 +104,12 @@ FpWindow::FpWindow(QWidget *parent) :
 //*****************************************************************************
 FpWindow::~FpWindow()
 {
-    delete ui;
+    //*** stop all comms signals ***
+    scaleSock_->disconnect();
+    svr_->disconnect();
+
+    if ( fpDB_ ) delete [] fpDB_;
+    if ( localDB_ ) delete [] localDB_;
 
     delete trayIcon_;
     delete trayIconMenu_;
@@ -117,6 +117,7 @@ FpWindow::~FpWindow()
     delete svr_;
     delete scaleSock_;
 
+    delete ui;
 }
 
 
@@ -132,16 +133,17 @@ void FpWindow::iconActivated( QSystemTrayIcon::ActivationReason reason )
     switch (reason)
     {
     case QSystemTrayIcon::Trigger:
-        qDebug() << "Trigger";
+        handleShowWeight();
         break;
 
     case QSystemTrayIcon::DoubleClick:
-        qDebug() << "DoubleClick";
         break;
 
     case QSystemTrayIcon::MiddleClick:
-        qDebug() << "MiddleClick";
-        showBadIcon();
+        if ( isVisible() )
+            hide();
+        else
+            showNormal();
         break;
 
     default:
@@ -158,7 +160,10 @@ void FpWindow::iconActivated( QSystemTrayIcon::ActivationReason reason )
 //*****************************************************************************
 void FpWindow::handleShowWeight()
 {
-    qDebug() << "Show weight";
+    QString msg = localDB_->getTodaysStatistics();
+
+    ui->textOut->append( msg );
+    trayIcon_->showMessage( "Todays statistics", msg );
 }
 
 
@@ -193,9 +198,9 @@ void FpWindow::handleRead()
 {
 t_CheckIn ci;
 
-    qDebug() << "Read...";
-
     QLocalSocket *client = (QLocalSocket*)sender();
+
+    ui->textOut->append( QString("LocalSocket : size %1").arg(client->bytesAvailable()) );
 
     if ( client->bytesAvailable() == CHECKIN_SIZE )
     {
@@ -213,6 +218,9 @@ t_CheckIn ci;
         {
             scaleSock_->write( (const char*)&ci, CHECKIN_SIZE );
         }
+
+        //*** save mapping of key to name ***
+        keyToName_[ci.key] = QString( ci.name );
     }
     else
     {
@@ -296,9 +304,11 @@ void FpWindow::setupNetworking()
     scalePort_ = SCALE_PORT;
     scaleAddr_.setAddress( SCALE_ADDR );
 
-    connect(scaleSock_, SIGNAL(connected()), SLOT(handleTcpConnected()));
-    connect(scaleSock_, SIGNAL(disconnected()), SLOT(handleTcpDisconnected()));
-    connect(scaleSock_, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(handleTcpError(QAbstractSocket::SocketError)));
+    //*** socket connections ***
+    connect( scaleSock_, SIGNAL(connected()), SLOT(handleTcpConnected()));
+    connect( scaleSock_, SIGNAL(disconnected()), SLOT(handleTcpDisconnected()));
+    connect( scaleSock_, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(handleTcpError(QAbstractSocket::SocketError)));
+    connect( scaleSock_, SIGNAL(readyRead()), SLOT(handleDataIn()) );
 
     //*** start attempting to connect ***
     attemptReconnect();
@@ -313,18 +323,39 @@ void FpWindow::setupNetworking()
 //*****************************************************************************
 void FpWindow::setupDatabase()
 {
+QString buf;
+
+    //*** Access database ***
+    fpDB_ = new FPDB( "QODBC3", DB_DSN_NAME, ACCESS_DB_LABEL, false, this );
+
+    //*** local database ***
+    localDB_ = new FPDB( "QSQLITE", LOCAL_DB_PATH, LOCAL_DB_LABEL, true, this );
+
+    if ( !fpDB_->isReady() )
+    {
+        buf = "Error opening Access db : " + fpDB_->lastError();
+        ui->textOut->append( buf );
+    }
+    if ( !localDB_->isReady() )
+    {
+        buf = "Error opening local db : " + localDB_->lastError();
+        ui->textOut->append( buf );
+    }
+
+#if 0
     QSqlDatabase db = QSqlDatabase::addDatabase("QODBC3");
     db.setDatabaseName( DB_DSN_NAME );
 
     if(db.open())
     {
-        qDebug() << "oK";
+        qDebug() << "Ok";
         qDebug() << db.tables();
     }
     else
       qDebug() << db.lastError().text();
 
     db.close();
+#endif
 }
 
 
@@ -350,7 +381,6 @@ void FpWindow::attemptReconnect()
        isConnected_ = false;
        attemptingConnect_ = true;
        scaleSock_->connectToHost( scaleAddr_, scalePort_, QAbstractSocket::ReadWrite);
-
 
        // after the timeout, check if we have connected. If the connection succeeds, connected() will handle going forward and this timeout will do nothing
        QTimer::singleShot(CONNECT_TIMEOUT_MS, this, SLOT(checkConnectionFailed()));
@@ -423,6 +453,51 @@ void FpWindow::handleTcpDisconnected()
     attemptReconnect();
 
     showBadIcon();
+}
+
+
+//********************************************************************************
+//********************************************************************************
+/**
+ * Occurs when there is data available on the TCP socket (from the scale)
+ */
+//********************************************************************************
+void FpWindow::handleDataIn()
+{
+t_WeightReport wr;
+
+    //*** get data ***
+    while ( scaleSock_->bytesAvailable() >= WEIGHT_SIZE )
+    {
+        //*** read structs worth of data ***
+        if ( scaleSock_->read( (char*)&wr, WEIGHT_SIZE ) == WEIGHT_SIZE )
+        {
+            if ( wr.magic == MAGIC_VAL && wr.type == WEIGHT_REPORT_TYPE )
+            {
+                QString buf;
+                buf = QString( "Key: %1  name: %2  weight: %3  day: %4")
+                        .arg( wr.key )
+                        .arg( keyToName_[wr.key] )
+                        .arg( wr.weight )
+                        .arg( QDate::fromJulianDay(wr.day).toString() );
+                ui->textOut->append( buf );
+
+                //*** add data to databases ***
+
+                //*** Access db ***
+                if ( fpDB_->isReady() )
+                {
+                    fpDB_->addRecord( wr.key, wr.weight );
+                }
+
+                //*** local db ***
+                if ( localDB_->isReady() )
+                {
+                    localDB_->addRecord( wr.key, wr.weight, wr.day, keyToName_[wr.key] );
+                }
+            }
+        }
+    }
 }
 
 

@@ -20,6 +20,8 @@ const QString ID_Field     = "Rec_Id";
 const QString Fam_ID_Field = "Fam_Id";
 const QString Weight_Field = "Weight";
 const QString Date_Field   = "Date";
+const QString Name_Field   = "Name";
+
 
 //**********************************************************
 //********************** Bind Names ************************
@@ -28,6 +30,7 @@ const QString ID_Bind     = ":" + ID_Field;
 const QString Fam_ID_Bind = ":" + Fam_ID_Field;
 const QString Weight_Bind = ":" + Weight_Field;
 const QString Date_Bind   = ":" + Date_Field;
+const QString Name_Bind   = ":" + Name_Field;
 
 //***********************************************************
 //********************* Column Names ************************
@@ -36,6 +39,7 @@ const int ID_Idx     = 0;
 const int Fam_ID_Idx = 1;
 const int Weight_Idx = 2;
 const int Date_Idx   = 3;
+const int Name_Idx   = 4;
 
 
 //*****************************************************************************
@@ -53,6 +57,9 @@ public:
     //*** constructor ***
     explicit FPDB( QString driver, QString dsn, QString label, bool isLocal, QObject *parent = nullptr);
 
+    //*** destructor ***
+    ~FPDB();
+
     //*** if TRUE, database is opened and ready ***
     bool isReady() { return isReady_; }
 
@@ -60,7 +67,8 @@ public:
     QString lastError() { return lastError_; }
 
     //*** adds a record ***
-    bool addRecord( qint32 famId, float weight, qint64 date=0 );
+    bool addRecord( qint32 famId, float weight );
+    bool addRecord( qint32 famId, float weight, qint64 date, QString name );
 
     //*** gets a string with the statistics for the day ***
     QString getTodaysStatistics();
