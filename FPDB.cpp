@@ -185,7 +185,7 @@ bool rtn = true;
 
     QString qry;
 
-    qry.sprintf( "insert into %s ( %s, %s ) values ( %d, %.2f) ",
+    qry.sprintf( "insert into %s ( %s, %s ) values ( %d, %.2f ) ",
                  qPrintable(WeightTableName),
                  qPrintable(Fam_ID_Field), qPrintable(Weight_Field),
                  famId, weight );
@@ -194,9 +194,6 @@ bool rtn = true;
     db_.exec( qry );
     QSqlError err = db_.lastError();
     rtn = !err.isValid();
-
-    qDebug() << qry;
-    qDebug() << db_.lastError().text();
 
     return rtn;
 }
