@@ -3,6 +3,8 @@
 #include <QSqlError>
 #include <QDate>
 #include <QSqlRecord>
+#include <QSqlError>
+#include <QDebug>
 
 //*****************************************************************************
 //*****************************************************************************
@@ -105,15 +107,25 @@ void FPDB::setup()
     else
     {
         //*** for Access weights database ***
-        insertStr = QString( "INSERT INTO %1 ( %2, %3, %4 ) " )
+        insertStr = QString( "INSERT INTO %1 ( %2, %3 ) " )
                 .arg(WeightTableName)
-                .arg(ID_Field)
                 .arg(Fam_ID_Field)
                 .arg(Weight_Field);
-        insertStr += QString( "VALUES ( %1, %2, %3 )" )
-                .arg(ID_Bind)
+        insertStr += QString( "VALUES ( %1, %2 )" )
                 .arg(Fam_ID_Bind)
                 .arg(Weight_Bind);
+
+
+//        //*** for Access weights database ***
+//        insertStr = QString( "INSERT INTO %1 ( %2, %3, %4 ) " )
+//                .arg(WeightTableName)
+//                .arg(ID_Field)
+//                .arg(Fam_ID_Field)
+//                .arg(Weight_Field);
+//        insertStr += QString( "VALUES ( %1, %2, %3 )" )
+//                .arg(ID_Bind)
+//                .arg(Fam_ID_Bind)
+//                .arg(Weight_Bind);
     }
 
     //*** create a 'permanent' insert query ***
@@ -171,20 +183,20 @@ bool FPDB::addRecord( qint32 famId, float weight )
 {
 bool rtn = true;
 
-    //*** ID for this record ***
-    qint32 id = nextRecID_++;
+    QString qry;
 
-    //*** bind values to query ***
-    insertQry_->bindValue( ID_Bind,     id );
-    insertQry_->bindValue( Fam_ID_Bind, famId );
-    insertQry_->bindValue( Weight_Bind, weight );
+    qry.sprintf( "insert into %s ( %s, %s ) values ( %d, %.2f) ",
+                 qPrintable(WeightTableName),
+                 qPrintable(Fam_ID_Field), qPrintable(Weight_Field),
+                 famId, weight );
 
-    //*** execute the query ***
-    if ( !insertQry_->exec() )
-    {
-        lastError_ = insertQry_->lastError().text();
-        rtn = false;
-    }
+    //*** do the insert ***
+    db_.exec( qry );
+    QSqlError err = db_.lastError();
+    rtn = !err.isValid();
+
+    qDebug() << qry;
+    qDebug() << db_.lastError().text();
 
     return rtn;
 }

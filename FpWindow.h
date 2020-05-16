@@ -66,8 +66,9 @@ private slots:
     void iconActivated( QSystemTrayIcon::ActivationReason reason );
     void handleShowWeight();
 
-    void handleConnection();
-    void handleRead();
+    //*** local socket data ***
+    void handlePipeConnection();
+    void handlePipeRead();
 
     //********************************************************************************
     //********************************************************************************
@@ -169,6 +170,7 @@ private:
     QIcon badIcon_;
 
     QHash<int,QString> keyToName_;
+    QHash<int,float>   keyToWeight_;
 
     FPDB *fpDB_;
     FPDB *localDB_;

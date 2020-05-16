@@ -17,9 +17,9 @@
 const QString FP_PIPE_NAME = "FP_Pipe";
 
 const quint16 SCALE_PORT = 29456;
-//const QString SCALE_ADDR = "10.0.1.1";
+const QString SCALE_ADDR = "10.0.1.1";
 //const QString SCALE_ADDR = "127.0.0.1";
-const QString SCALE_ADDR = "10.0.0.172";
+//const QString SCALE_ADDR = "10.0.0.172";
 
 const int CONNECT_TIMEOUT_MS = 1000;
 
@@ -50,7 +50,7 @@ FpWindow::FpWindow(QWidget *parent) :
     svr_ = new QLocalServer( this );
 
     //*** connect to needed slots ***
-    connect( svr_, SIGNAL(newConnection()), SLOT(handleConnection()) );
+    connect( svr_, SIGNAL(newConnection()), SLOT(handlePipeConnection()) );
 
 
     //*** start listening for connections ***
@@ -170,10 +170,10 @@ void FpWindow::handleShowWeight()
 //*****************************************************************************
 //*****************************************************************************
 /**
- * @brief FpWindow::handleConnection
+ * @brief FpWindow::handlePipeConnection
  */
 //*****************************************************************************
-void FpWindow::handleConnection()
+void FpWindow::handlePipeConnection()
 {
     qDebug() << "Connection...";
 
@@ -184,23 +184,23 @@ void FpWindow::handleConnection()
     connect(client, &QLocalSocket::disconnected, client, &QLocalSocket::deleteLater );
 
     //*** wait for incoming data ***
-    connect( client, SIGNAL(readyRead()), SLOT(handleRead()) );
+    connect( client, SIGNAL(readyRead()), SLOT(handlePipeRead()) );
 }
 
 
 //*****************************************************************************
 //*****************************************************************************
 /**
- * @brief FpWindow::handleRead
+ * @brief FpWindow::handlePipeRead
  */
 //*****************************************************************************
-void FpWindow::handleRead()
+void FpWindow::handlePipeRead()
 {
 t_CheckIn ci;
 
     QLocalSocket *client = (QLocalSocket*)sender();
 
-    ui->textOut->append( QString("LocalSocket : size %1").arg(client->bytesAvailable()) );
+//    ui->textOut->append( QString("LocalSocket : size %1").arg(client->bytesAvailable()) );
 
     if ( client->bytesAvailable() == CHECKIN_SIZE )
     {
@@ -208,7 +208,7 @@ t_CheckIn ci;
 
         QString day = QDate::fromJulianDay( ci.day ).toString( "MM/dd/yyyy" );
 
-        QString buf = QString( "key: %1  name: %2  items: %3  day: %4" )
+        QString buf = QString( "CHECKIN - key: %1  name: %2  items: %3  day: %4" )
                 .arg( ci.key ).arg( ci.name ).arg( ci.numItems ).arg( day );
 
         ui->textOut->append( buf );
@@ -221,6 +221,13 @@ t_CheckIn ci;
 
         //*** save mapping of key to name ***
         keyToName_[ci.key] = QString( ci.name );
+
+        //*** save mapping of key to weight ***
+        if ( !keyToWeight_.contains( ci.key ) )
+        {
+            //*** initialize to 0 ***
+            keyToWeight_[ci.key] = 0.0;
+        }
     }
     else
     {
@@ -401,7 +408,7 @@ void FpWindow::checkConnectionFailed()
     {
        // connection failed, try again
        tmOutCnt_++;
-       if ( tmOutCnt_ % 10 == 0 )
+       if ( tmOutCnt_ % 60 == 0 )
        {
           ui->textOut->append( "Unable to connect, retrying..." );
        }
@@ -475,7 +482,7 @@ t_WeightReport wr;
             if ( wr.magic == MAGIC_VAL && wr.type == WEIGHT_REPORT_TYPE )
             {
                 QString buf;
-                buf = QString( "Key: %1  name: %2  weight: %3  day: %4")
+                buf = QString( "FROM PI - Key: %1  name: %2  weight: %3  day: %4")
                         .arg( wr.key )
                         .arg( keyToName_[wr.key] )
                         .arg( wr.weight )
@@ -487,7 +494,9 @@ t_WeightReport wr;
                 //*** Access db ***
                 if ( fpDB_->isReady() )
                 {
-                    fpDB_->addRecord( wr.key, wr.weight );
+                    //*** add weight (maintain total if more than one record) ***
+                    keyToWeight_[wr.key] += wr.weight;
+                    fpDB_->addRecord( wr.key, keyToWeight_[wr.key] );
                 }
 
                 //*** local db ***
