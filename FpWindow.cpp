@@ -200,8 +200,6 @@ t_CheckIn ci;
 
     QLocalSocket *client = (QLocalSocket*)sender();
 
-//    ui->textOut->append( QString("LocalSocket : size %1").arg(client->bytesAvailable()) );
-
     if ( client->bytesAvailable() == CHECKIN_SIZE )
     {
         client->read( (char*)&ci, CHECKIN_SIZE );
@@ -223,9 +221,10 @@ t_CheckIn ci;
         keyToName_[ci.key] = QString( ci.name );
 
         //*** save mapping of key to weight ***
-        if ( !keyToWeight_.contains( ci.key ) )
+        //*** or clear weight if 'unchecked out' ***
+        if ( !keyToWeight_.contains( ci.key ) || ci.numItems == 0 )
         {
-            //*** initialize to 0 ***
+            //*** initialize to 0 ( or clear ) ***
             keyToWeight_[ci.key] = 0.0;
         }
     }
