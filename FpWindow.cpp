@@ -227,12 +227,6 @@ t_CheckIn ci;
             //*** initialize to 0 ( or clear ) ***
             keyToWeight_[ci.key] = 0.0;
         }
-
-        //*** clear previous weight total if #items == 0 ***
-        if ( ci.numItems == 0 )
-        {
-            keyToWeight_[ci.key] = 0.0;
-        }
     }
     else
     {
