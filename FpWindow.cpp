@@ -200,8 +200,6 @@ t_CheckIn ci;
 
     QLocalSocket *client = (QLocalSocket*)sender();
 
-//    ui->textOut->append( QString("LocalSocket : size %1").arg(client->bytesAvailable()) );
-
     if ( client->bytesAvailable() == CHECKIN_SIZE )
     {
         client->read( (char*)&ci, CHECKIN_SIZE );
@@ -226,6 +224,12 @@ t_CheckIn ci;
         if ( !keyToWeight_.contains( ci.key ) )
         {
             //*** initialize to 0 ***
+            keyToWeight_[ci.key] = 0.0;
+        }
+
+        //*** clear previous weight total if #items == 0 ***
+        if ( ci.numItems == 0 )
+        {
             keyToWeight_[ci.key] = 0.0;
         }
     }
