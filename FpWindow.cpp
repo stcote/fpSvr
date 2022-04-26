@@ -2,9 +2,9 @@
 #include "ui_FpWindow.h"
 #include "FPDB.h"
 
-#include <QLocalServer>
-#include <QLocalSocket>
 #include <QTcpSocket>
+#include <QUdpSocket>
+#include <QNetworkDatagram>
 #include <QDate>
 #include <QDebug>
 #include <QTimer>
@@ -14,12 +14,12 @@
 #include <QSqlQuery>
 
 
-const QString FP_PIPE_NAME = "FP_Pipe";
-
 const quint16 SCALE_PORT = 29456;
 const QString SCALE_ADDR = "10.0.1.1";
 //const QString SCALE_ADDR = "127.0.0.1";
 //const QString SCALE_ADDR = "10.0.0.172";
+
+const quint16 FP_PORT = 29457;
 
 const int CONNECT_TIMEOUT_MS = 1000;
 
@@ -46,18 +46,12 @@ FpWindow::FpWindow(QWidget *parent) :
     isConnected_       = false;
     tmOutCnt_          = 0;
 
-    //*** create new checkin server ***
-    svr_ = new QLocalServer( this );
+    //*** create new UDP port to listen for FP packets ***
+    udp_ = new QUdpSocket(this);
+    udp_->bind( QHostAddress::LocalHost, FP_PORT );
 
-    //*** connect to needed slots ***
-    connect( svr_, SIGNAL(newConnection()), SLOT(handlePipeConnection()) );
-
-
-    //*** start listening for connections ***
-    if ( !svr_->listen( FP_PIPE_NAME ) )
-    {
-        ui->textOut->append( "Error listening for connection!!!" );
-    }
+    //*** connect to 'needed'msg in' slot ***
+    connect( udp_, SIGNAL(readyRead()), SLOT(handlePendingDatagrams() ) );
 
     //*** create the icons we need ***
     goodIcon_ = QIcon(":/images/good.png");
@@ -106,7 +100,6 @@ FpWindow::~FpWindow()
 {
     //*** stop all comms signals ***
     scaleSock_->disconnect();
-    svr_->disconnect();
 
     if ( fpDB_ ) delete [] fpDB_;
     if ( localDB_ ) delete [] localDB_;
@@ -114,7 +107,7 @@ FpWindow::~FpWindow()
     delete trayIcon_;
     delete trayIconMenu_;
 
-    delete svr_;
+    delete udp_;
     delete scaleSock_;
 
     delete ui;
@@ -166,72 +159,56 @@ void FpWindow::handleShowWeight()
     trayIcon_->showMessage( "Todays statistics", msg );
 }
 
-
 //*****************************************************************************
 //*****************************************************************************
 /**
- * @brief FpWindow::handlePipeConnection
+ * @brief FpWindow::handlePendingDatagrams
  */
 //*****************************************************************************
-void FpWindow::handlePipeConnection()
+void FpWindow::handlePendingDatagrams()
 {
-    qDebug() << "Connection...";
-
-    //*** get the pending connection ***
-    QLocalSocket *client = svr_->nextPendingConnection();
-
-    //*** delete on disconnect ***
-    connect(client, &QLocalSocket::disconnected, client, &QLocalSocket::deleteLater );
-
-    //*** wait for incoming data ***
-    connect( client, SIGNAL(readyRead()), SLOT(handlePipeRead()) );
-}
-
-
-//*****************************************************************************
-//*****************************************************************************
-/**
- * @brief FpWindow::handlePipeRead
- */
-//*****************************************************************************
-void FpWindow::handlePipeRead()
-{
-t_CheckIn ci;
-
-    QLocalSocket *client = (QLocalSocket*)sender();
-
-    if ( client->bytesAvailable() == CHECKIN_SIZE )
+    // process all datagrams that are pending
+    while (udp_->hasPendingDatagrams())
     {
-        client->read( (char*)&ci, CHECKIN_SIZE );
+        // get the datagram
+        QNetworkDatagram datagram = udp_->receiveDatagram();
 
-        QString day = QDate::fromJulianDay( ci.day ).toString( "MM/dd/yyyy" );
+        // pull out the bytes
+        QByteArray msg = datagram.data();
+
+        if ( msg.size() != CHECKIN_SIZE )
+        {
+            qDebug() << "Invalid checkin message size received!!!";
+            continue;
+        }
+
+        t_CheckIn* ci = (t_CheckIn*)msg.data();
+
+        QString day = QDate::fromJulianDay( ci->day ).toString( "MM/dd/yyyy" );
 
         QString buf = QString( "CHECKIN - key: %1  name: %2  items: %3  day: %4" )
-                .arg( ci.key ).arg( ci.name ).arg( ci.numItems ).arg( day );
+                .arg( ci->key ).arg( ci->name ).arg( ci->numItems ).arg( day );
 
         ui->textOut->append( buf );
 
         //*** send to scale server if connected ***
         if ( isConnected_ )
         {
-            scaleSock_->write( (const char*)&ci, CHECKIN_SIZE );
+            scaleSock_->write( (const char*)ci, CHECKIN_SIZE );
         }
 
         //*** save mapping of key to name ***
-        keyToName_[ci.key] = QString( ci.name );
+        keyToName_[ci->key] = QString( ci->name );
 
         //*** save mapping of key to weight ***
         //*** or clear weight if 'unchecked out' ***
-        if ( !keyToWeight_.contains( ci.key ) || ci.numItems == 0 )
+        if ( !keyToWeight_.contains( ci->key ) || ci->numItems == 0 )
         {
             //*** initialize to 0 ( or clear ) ***
-            keyToWeight_[ci.key] = 0.0;
+            keyToWeight_[ci->key] = 0.0;
         }
     }
-    else
-    {
-        ui->textOut->append( "Data size error!!!" );
-    }
+
 }
 
 

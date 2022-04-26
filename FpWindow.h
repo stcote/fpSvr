@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QSystemTrayIcon>
+#include <QUdpSocket>
 #include <QHostAddress>
 #include <QTimer>
 
@@ -10,8 +11,9 @@ namespace Ui {
 class FpWindow;
 }
 
-class QLocalServer;
+//class QLocalServer;
 class QTcpSocket;
+class QUdpSocket;
 class FPDB;
 
 const int NAME_MAX = 127;
@@ -67,8 +69,7 @@ private slots:
     void handleShowWeight();
 
     //*** local socket data ***
-    void handlePipeConnection();
-    void handlePipeRead();
+    void handlePendingDatagrams();
 
     //********************************************************************************
     //********************************************************************************
@@ -142,7 +143,7 @@ private:
     Ui::FpWindow *ui;
 
     //*** Windows 'Named Pipe' server ***
-    QLocalServer *svr_;
+    QUdpSocket *udp_;
 
     //*** client socket to talk to scale server ***
     QTcpSocket *scaleSock_;
